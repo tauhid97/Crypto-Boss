@@ -1,0 +1,4 @@
+# Coins you can trade on Robinhood (US), as Coinbase names them. Edit freely.
+# Check the Robinhood app's crypto list now and then - remove any it doesn't have.
+BTC ETH SOL XRP DOGE ADA AVAX LINK LTC BCH ETC XLM SHIB UNI AAVE COMP
+XTZ PEPE BONK WIF ARB ONDO SUI HBAR TRUMP PENGU POPCAT MOODENG PNUT VIRTUAL HYPE CRV

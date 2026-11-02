@@ -1,0 +1,6 @@
+# Public Telegram channels the Signal Checker watches (the name after t.me/). Edit freely.
+# Picked because they post clear calls (entry, stop, target). NOT because they're good - that's what we're checking.
+whalesguide               # Whales Guide - most calls; many are leveraged shorts
+WallstreetQueenOfficial   # Wallstreet Queen - some buy calls
+cryptosignals0rg          # CryptoSignals.org - few calls, coins mostly not on Robinhood
+universalcryptosignals    # Universal Crypto Signals - quiet lately, mixes in gold
