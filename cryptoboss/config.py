@@ -8,6 +8,7 @@ REPORT_FILE = "docs/index.html"
 CHANNELS_FILE = "channels.txt"
 CALLS_FILE = "data/channel_calls.csv"
 CHECKER_STATE_FILE = "data/checker_state.json"
+COMMANDS_STATE_FILE = "data/commands_state.json"   # which Telegram messages from Boss were already answered
 
 # PRACTICE until the track record has looked good for 2-3 months. There is no "live" mode yet on purpose.
 MODE = "PRACTICE"

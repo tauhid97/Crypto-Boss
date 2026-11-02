@@ -18,6 +18,10 @@ After 2-3 months you'll know which channels (if any) are really good, with proof
 | A call finishes | "SIGNAL CHECKER - results: SOL buy: TARGET HIT +4.4%" |
 | Every night at ~9 PM New York time | The channel scoreboard: who's winning, who's losing |
 
+**You can ask the bot things** (it answers within about 15 minutes, because it only wakes up then):
+`/status` (is it working, what is it watching), `/calls` (calls it's still following),
+`/scoreboard` (how each channel is doing). It only answers you; anyone else is ignored.
+
 Sell/short calls and coins Robinhood doesn't have are graded quietly, without a message, so the
 scoreboard is fair. They're not messaged because you can't do them on Robinhood.
 

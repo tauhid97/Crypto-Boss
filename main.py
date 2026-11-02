@@ -3,13 +3,14 @@
   python main.py run            # the 15-minute routine (used by the schedule): Signal Checker
                                 #   (+ quick trades, only if QUICK_TRADES = True in config.py)
   python main.py scoreboard     # send the channel scoreboard to your Telegram now
+  (every run also answers Boss's /status, /calls and /scoreboard messages to the bot)
   python main.py hello          # send a test message to your Crypto Boss Telegram
   python main.py backtest 30    # practice on the last 30 days (prints the results, also sends them to Telegram)
   python main.py report         # rebuild the scoreboard page
 """
 import sys
 
-from cryptoboss import backtest, bot, checker, data, notify, report
+from cryptoboss import backtest, bot, checker, commands, data, notify, report
 from cryptoboss import config as C
 
 
@@ -19,6 +20,10 @@ def main():
         if C.QUICK_TRADES:
             bot.run()
         checker.run()
+        try:
+            commands.handle()
+        except Exception as e:             # a Telegram hiccup must never stop the results being saved
+            print("Commands skipped:", e)
     elif cmd == "scoreboard":
         notify.send(checker.scoreboard_text(checker.load_calls()))
     elif cmd == "hello":
