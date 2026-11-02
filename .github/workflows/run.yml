@@ -38,6 +38,7 @@ jobs:
         run: |
           git config user.name "crypto-boss-bot"
           git config user.email "crypto-boss-bot@users.noreply.github.com"
+          mkdir -p data docs
           git add -A data docs
           git diff --cached --quiet || git commit -m "Update Crypto Boss $(date -u +%FT%H:%M)"
           git pull --rebase --quiet && git push
