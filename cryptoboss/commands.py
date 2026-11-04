@@ -17,7 +17,7 @@ import requests
 from . import config as C
 from . import notify
 from .bot import load_signals, skills_text
-from .skills import SKILLS, money
+from .skills import ALL_SKILLS, money
 from .tracker import ACTIVE
 
 HELP = ("Hi Boss! I wake up about every 15 minutes, so my answers can take that long.\n"
@@ -43,7 +43,7 @@ def status_text(sigs, now):
     done = sigs[sigs["status"].isin(["target", "stop", "timeout"])]
     t = now.tz_convert(C.TIMEZONE)
     lines = [f"I'm awake, Boss! Checked at {t:%I:%M %p} ET ({t:%a %b %d}).".replace(" 0", " "),
-             f"Practice scalping with {len(SKILLS)} skills on the wildest Robinhood coins, 24/7.",
+             f"Practice trading with {len(ALL_SKILLS)} skills on Robinhood coins, 24/7.",
              f"Trades going now: {len(active)} ({(active['status'] == 'pending').sum()} waiting to buy, "
              f"{(active['status'] == 'open').sum()} bought)."]
     if len(done):

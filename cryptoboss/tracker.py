@@ -20,8 +20,14 @@ def _close(sig, price, ts, status):
     return sig
 
 
+def _window(sig, key, default):
+    v = sig.get(key)
+    return pd.Timedelta(v if isinstance(v, str) and v else default)
+
+
 def settle(sig, bars, now):
     """Update one signal (dict) using candles; returns the same dict."""
+    window, hold = _window(sig, "entry_window", C.ENTRY_WINDOW), _window(sig, "max_hold", C.MAX_HOLD)
     pub = pd.Timestamp(sig["published_at"])
     entry, stop, target = sig["entry"], sig["stop"], sig["target"]
     step = pd.Timedelta(C.CANDLE)
@@ -30,7 +36,7 @@ def settle(sig, bars, now):
         if ts + step > now:
             break
         if filled_at is None:
-            if ts >= pub + pd.Timedelta(C.ENTRY_WINDOW):
+            if ts >= pub + window:
                 sig.update(status="no_fill", r_multiple=0.0, pct_return=0.0, exit_time=ts.isoformat())
                 return sig
             if b["High"] < entry:
@@ -40,12 +46,12 @@ def settle(sig, bars, now):
             if b["Low"] <= stop:                       # stopped in the same candle we got in
                 return _close(sig, stop, ts, "stop")
             continue
-        if ts >= filled_at + pd.Timedelta(C.MAX_HOLD):
+        if ts >= filled_at + hold:
             return _close(sig, b["Open"], ts, "timeout")
         if b["Low"] <= stop:
             return _close(sig, min(stop, b["Open"]), ts, "stop")
         if b["High"] >= target:
             return _close(sig, max(target, b["Open"]), ts, "target")
-    if filled_at is None and now >= pub + pd.Timedelta(C.ENTRY_WINDOW) + step:
+    if filled_at is None and now >= pub + window + step:
         sig.update(status="no_fill", r_multiple=0.0, pct_return=0.0, exit_time=now.isoformat())
     return sig

@@ -178,9 +178,84 @@ def triple_check(df, i):
             "reason": "Stochastic bounced from oversold, RSI and MACD both agree"}
 
 
+# --- day skills: borrowed from Boss's stock bot, they look at whole days and may hold up to 1 day ---
+
+def day_context(df, daily, t):
+    """What a day skill needs at time t: the finished days before today + today's 15-minute candles so far."""
+    today = t.floor("1D")
+    d = daily[daily.index < today]
+    b = df[(df.index >= today) & (df.index + pd.Timedelta(C.CANDLE) <= t)]
+    if len(d) < 60 or not len(b):
+        return None
+    c, h, lo = d["Close"], d["High"], d["Low"]
+    tr = pd.concat([h - lo, (h - c.shift()).abs(), (lo - c.shift()).abs()], axis=1).max(axis=1)
+    typ = (b["High"] + b["Low"] + b["Close"]) / 3
+    vol20 = float(d["Volume"].iloc[-20:].mean())
+    day_vol = float(b["Volume"].sum())
+    return {"last": float(b["Close"].iloc[-1]), "hod": float(b["High"].max()), "lod": float(b["Low"].min()),
+            "vwap": float((typ * b["Volume"]).sum() / day_vol) if day_vol > 0 else float(b["Close"].iloc[-1]),
+            "rvol": day_vol / (vol20 * len(b) / 96) if vol20 > 0 else 0.0,
+            "day_chg": float(b["Close"].iloc[-1]) / float(c.iloc[-1]) - 1,
+            "drop60": float(c.iloc[-1]) / float(c.iloc[-60]) - 1,
+            "below50": float(c.iloc[-1]) < float(c.iloc[-50:].mean()),
+            "atr": float(tr.ewm(alpha=1 / 14, adjust=False).mean().iloc[-1])}
+
+
+def wake_up_rally(x):
+    """Stock bot's Downtrend Reversal: down 15%+ in 60 days and under its 50-day line, then today it jumps
+    3%+ on 2x the usual volume with a big range. Buy as it breaks its high of the day.
+    Crypto test (Aug 2025 - Nov 2026, 1h candles, fee on): 76 trades, +0.45R each, held up to 1 day."""
+    if x["rvol"] < 2.0 or x["day_chg"] * 100 < 3.0 or x["drop60"] * 100 > -15 or not x["below50"]:
+        return None
+    if (x["hod"] - x["lod"]) < x["atr"] or x["last"] < x["vwap"] or (x["hod"] / x["last"] - 1) * 100 > 1.0:
+        return None
+    entry = x["hod"] * 1.001
+    return {"order_type": "buy_stop", "entry": entry, "stop": max(x["vwap"] * 0.999, entry - 0.8 * x["atr"]),
+            "reason": f"Down {abs(x['drop60']) * 100:.0f}% in 60 days, now up {x['day_chg'] * 100:.1f}% today "
+                      f"on {x['rvol']:.1f}x volume - buy if it makes a new high"}
+
+
+DAY_SKILLS = {"Wake-Up Rally": wake_up_rally}
+
+
+def find_day(frames, get_daily, t, blocked, skip):
+    """Day skills look at EVERY coin people trade (not just the 5 wildest).
+    skip = (coin, skill) pairs that already fired today. get_daily(coin) downloads that coin's daily candles."""
+    w, _ = weather(frames, t)
+    out = []
+    if w == "stormy":
+        return out
+    for coin, df in frames.items():
+        if coin == C.MARKET_COIN or coin in blocked:
+            continue
+        i = row_at(df, t)
+        if i < 96 or not df["DollarVol24h"].iloc[i] >= C.MIN_24H_DOLLAR_VOL:
+            continue
+        # quick check first, so we only download daily candles for coins that are up a lot today
+        before = df[df.index < t.floor("1D")]
+        if not len(before) or df["Close"].iloc[i] / before["Close"].iloc[-1] - 1 < 0.03:
+            continue
+        daily = get_daily(coin)
+        x = day_context(df, daily, t) if daily is not None else None
+        if x is None:
+            continue
+        for name, fn in DAY_SKILLS.items():
+            if (coin, name) in skip:
+                continue
+            idea = fn(x)
+            if idea and (s := make_signal(coin, name, idea)):
+                s.update(entry_window=C.DAY_ENTRY_WINDOW, max_hold=C.DAY_MAX_HOLD)
+                out.append(s)
+                break
+        if len(out) >= C.MAX_NEW_PER_RUN:
+            break
+    return out
+
+
 SKILLS = {"Breakout Rocket": breakout_rocket, "Dip Catcher": dip_catcher, "EMA Cross": ema_cross,
           "MACD 200": macd_200, "Band Bounce": band_bounce, "VWAP Pullback": vwap_pullback,
           "Triple Check": triple_check}
+ALL_SKILLS = {**SKILLS, **DAY_SKILLS}
 
 KID_EXPLAINERS = {
     "Breakout Rocket": "The coin is going up and lots of people just jumped in. If it breaks above "
@@ -194,6 +269,8 @@ KID_EXPLAINERS = {
                    "and sell at the middle.",
     "VWAP Pullback": "The coin came back to the average price everyone paid today and bounced off it.",
     "Triple Check": "Three different gauges all agree the coin is turning up from a dip.",
+    "Wake-Up Rally": "This coin has been sliding down for months. Today it suddenly woke up and is jumping "
+                     "on lots of buying. If it keeps climbing to a new high, we buy, and may hold up to 1 day.",
 }
 
 

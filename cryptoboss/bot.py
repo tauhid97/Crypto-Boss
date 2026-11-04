@@ -6,12 +6,13 @@ import pandas as pd
 
 from . import config as C
 from . import notify, report
-from .data import get_all
-from .skills import KID_EXPLAINERS, find_new, money, prepare
+from .data import daily, get_all
+from .skills import KID_EXPLAINERS, find_day, find_new, money, prepare
 from .tracker import ACTIVE, settle
 
 COLS = ["id", "published_at", "coin", "skill", "order_type", "entry", "stop", "target", "risk_pct",
-        "reason", "status", "fill_time", "fill_price", "exit_time", "exit_price", "r_multiple", "pct_return"]
+        "reason", "status", "fill_time", "fill_price", "exit_time", "exit_price", "r_multiple", "pct_return",
+        "entry_window", "max_hold"]
 DISCLAIMER = ("Practice signals for learning only, not financial advice. Crypto is very risky and can "
               "drop fast. Past results do not guarantee future results.")
 WORDS = {"target": "TARGET HIT", "stop": "STOPPED OUT", "timeout": "SOLD (time's up)", "no_fill": "NEVER BOUGHT"}
@@ -50,7 +51,9 @@ def et(ts):
 
 def signal_text(s, weather_note):
     pub = pd.Timestamp(s["published_at"])
-    cancel = et(pub + pd.Timedelta(C.ENTRY_WINDOW))
+    window, hold = (pd.Timedelta(s.get("entry_window") or C.ENTRY_WINDOW),
+                    pd.Timedelta(s.get("max_hold") or C.MAX_HOLD))
+    cancel = et(pub + window)
     return "\n".join([
         f"CRYPTO BOSS [{C.MODE}] - {s['coin']}",
         f"Skill: {s['skill']}",
@@ -58,7 +61,7 @@ def signal_text(s, weather_note):
         f"Stop (uh-oh, sell): {money(s['stop'])}",
         f"Target (yay, sell): {money(s['target'])}",
         f"Risk: {s['risk_pct']:.1f}% | Why: {s['reason']}",
-        f"Cancel if not bought by {cancel:%I:%M %p} ET. Sell after {pd.Timedelta(C.MAX_HOLD).components.hours} hours no matter what.",
+        f"Cancel if not bought by {cancel:%I:%M %p} ET. Sell after {hold.total_seconds() / 3600:.0f} hours no matter what.",
         f"Crypto weather: {weather_note}",
         "",
         f"What this skill does: {KID_EXPLAINERS[s['skill']]}",
@@ -97,10 +100,10 @@ def recap_text(df, day, top, note):
 
 def skill_stats(df):
     """Every skill's finished practice trades: [{skill, trades, win, avg, total, benched}], best first."""
-    from .skills import SKILLS
+    from .skills import ALL_SKILLS
     traded = df[df["status"].isin(["target", "stop", "timeout"])]
     out = []
-    for name in SKILLS:
+    for name in ALL_SKILLS:
         g = traded[traded["skill"] == name]
         n = len(g)
         avg = float(g["r_multiple"].mean()) if n else None
@@ -162,6 +165,11 @@ def run(now=None):
     blocked = set(df.loc[df["status"].isin(ACTIVE), "coin"])
     blocked |= {c for c, t in zip(df["coin"], df["published_at"]) if pd.Timestamp(t) > cool}
     new_sigs, w, note = find_new(frames, now, blocked)
+    # day skills (Wake-Up Rally): every coin, at most once per coin per UTC day
+    today = now.floor("1D")
+    skip = {(c, k) for c, k, t in zip(df["coin"], df["skill"], df["published_at"]) if pd.Timestamp(t) >= today}
+    blocked |= {s["coin"] for s in new_sigs}
+    new_sigs += find_day(frames, daily, now, blocked, skip)
     for s in new_sigs:
         s.update(id=f"{now:%Y%m%d%H%M}-{s['coin']}", published_at=now.isoformat(), status="pending")
         df = pd.concat([df, pd.DataFrame([s])], ignore_index=True) if len(df) else pd.DataFrame([s])

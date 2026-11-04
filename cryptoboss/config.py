@@ -41,6 +41,8 @@ MAX_RISK_PCT = 6.0
 MIN_TARGET_PCT = 1.2               # skip trades whose target is less than 1.2% away (the spread would eat it)
 ENTRY_WINDOW = "1h"                # if the price doesn't reach the entry within 1 hour, cancel
 MAX_HOLD = "4h"                    # sell after 4 hours no matter what
+DAY_ENTRY_WINDOW = "4h"            # day skills (Wake-Up Rally): 4 hours to get bought
+DAY_MAX_HOLD = "24h"               # ...and they may hold up to 1 day (the test needed the full day)
 COOLDOWN = "2h"                    # wait 2 hours before a new signal on the same coin
 MAX_NEW_PER_RUN = 2
 

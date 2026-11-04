@@ -58,6 +58,11 @@ def get_all(coins, now=None):
     return closed(out, now)
 
 
+def daily(coin):
+    """The last 300 daily candles (UTC days) - for the day skills."""
+    return _get(coin, step=pd.Timedelta("1D"))
+
+
 def history(coin, days):
     """Older candles for the backtest (Coinbase gives 300 at a time)."""
     end = pd.Timestamp.now(tz="UTC").floor(STEP)

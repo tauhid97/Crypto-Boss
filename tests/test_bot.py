@@ -118,6 +118,8 @@ def test_live():
     sent = []
     notify.send = lambda t: sent.append(t) or True
     bot.load_coins = lambda: list(market)
+    calls = []
+    bot.daily = lambda c: calls.append(c)        # offline: no daily candles (day skills stay quiet)
     end = market["BTC"].index[-1] + pd.Timedelta(minutes=15)
     t = market["BTC"].index[0] + pd.Timedelta(hours=40)
     runs = 0
