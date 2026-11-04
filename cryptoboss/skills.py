@@ -35,6 +35,19 @@ def prepare(df):
     df["High8"] = df["High"].rolling(8).max()                       # highest point of the last 2 hours
     df["Wild"] = ((df["High"] - df["Low"]) / c).rolling(96).mean() * 100   # avg candle size over 24h, in %
     df["DollarVol24h"] = (c * df["Volume"]).rolling(96).sum()
+    # extra lines for the YouTube skills
+    df["EMA9"] = c.ewm(span=9, adjust=False).mean()
+    df["EMA21"] = c.ewm(span=21, adjust=False).mean()
+    df["EMA200"] = c.ewm(span=200, adjust=False).mean()
+    df["MACD"] = c.ewm(span=12, adjust=False).mean() - c.ewm(span=26, adjust=False).mean()
+    df["MACDSig"] = df["MACD"].ewm(span=9, adjust=False).mean()
+    mid, sd = c.rolling(20).mean(), c.rolling(20).std()
+    df["BBMid"], df["BBLow"] = mid, mid - 2 * sd
+    typ = (df["High"] + df["Low"] + c) / 3
+    df["VWAP"] = (typ * df["Volume"]).rolling(96).sum() / df["Volume"].rolling(96).sum()   # 24-hour VWAP
+    lo14, hi14 = df["Low"].rolling(14).min(), df["High"].rolling(14).max()
+    df["StochK"] = (100 * (c - lo14) / (hi14 - lo14).replace(0, float("nan"))).rolling(3).mean()
+    df["StochD"] = df["StochK"].rolling(3).mean()
     return df
 
 
@@ -99,13 +112,88 @@ def dip_catcher(df, i):
             "reason": f"Uptrend dipped to its average line and bounced (RSI {r['RSI']:.0f})"}
 
 
-SKILLS = {"Breakout Rocket": breakout_rocket, "Dip Catcher": dip_catcher}
+# --- YouTube skills: the most-shared free scalping setups, written down exactly so they can be graded ---
+
+def _swing_low(df, i, n=5):
+    return float(df["Low"].iloc[i - n + 1:i + 1].min()) * 0.998
+
+
+def ema_cross(df, i):
+    """9/21 EMA crossover, only above the 200 EMA (the classic "9 and 21" YouTube setup)."""
+    if i < 210:
+        return None
+    r, p = df.iloc[i], df.iloc[i - 1]
+    if not (p["EMA9"] <= p["EMA21"] and r["EMA9"] > r["EMA21"] and r["Close"] > r["EMA200"]):
+        return None
+    return {"order_type": "buy_stop", "entry": r["High"] * 1.001, "stop": _swing_low(df, i),
+            "reason": "Fast line (9) crossed above slow line (21), and price is above the 200 line"}
+
+
+def macd_200(df, i):
+    """MACD crosses up while below zero, price above the 200 EMA (the famous "MACD + 200 EMA" video)."""
+    if i < 210:
+        return None
+    r, p = df.iloc[i], df.iloc[i - 1]
+    if not (p["MACD"] <= p["MACDSig"] and r["MACD"] > r["MACDSig"] and r["MACD"] < 0
+            and r["Close"] > r["EMA200"]):
+        return None
+    return {"order_type": "buy_stop", "entry": r["High"] * 1.001, "stop": _swing_low(df, i), "target_r": 1.5,
+            "reason": "MACD turned up from below zero while the coin is above its 200 line"}
+
+
+def band_bounce(df, i):
+    """Price fell below the lower Bollinger Band with RSI under 30, then a green candle (mean reversion).
+    Target: back to the middle band."""
+    if i < 30:
+        return None
+    r, p = df.iloc[i], df.iloc[i - 1]
+    if not (p["Close"] < p["BBLow"] and p["RSI"] < 30 and r["Close"] > r["Open"]):
+        return None
+    entry = r["High"] * 1.001
+    return {"order_type": "buy_stop", "entry": entry, "stop": _swing_low(df, i, 3), "target": r["BBMid"],
+            "reason": f"Stretched too far down (RSI {p['RSI']:.0f}) and starting to snap back"}
+
+
+def vwap_pullback(df, i):
+    """Above VWAP and trending, dips to touch VWAP and closes back above it."""
+    if i < 100:
+        return None
+    r = df.iloc[i]
+    if not (r["EMA21"] > r["VWAP"] and r["Low"] <= r["VWAP"] * 1.002 and r["Close"] > r["VWAP"]
+            and r["Close"] > r["Open"] and r["RSI"] > 50):
+        return None
+    return {"order_type": "buy_stop", "entry": r["High"] * 1.001, "stop": _swing_low(df, i, 3),
+            "reason": "Dipped to the day's average price (VWAP) and bounced"}
+
+
+def triple_check(df, i):
+    """Stochastic crosses up from under 20, RSI over 50, MACD above its signal (the "Stoch + RSI + MACD" video)."""
+    if i < 40:
+        return None
+    r = df.iloc[i]
+    k = df["StochK"].iloc[i - 4:i + 1]
+    if not ((k < 20).any() and r["StochK"] > r["StochD"] and r["RSI"] > 50 and r["MACD"] > r["MACDSig"]):
+        return None
+    return {"order_type": "buy_stop", "entry": r["High"] * 1.001, "stop": _swing_low(df, i), "target_r": 1.5,
+            "reason": "Stochastic bounced from oversold, RSI and MACD both agree"}
+
+
+SKILLS = {"Breakout Rocket": breakout_rocket, "Dip Catcher": dip_catcher, "EMA Cross": ema_cross,
+          "MACD 200": macd_200, "Band Bounce": band_bounce, "VWAP Pullback": vwap_pullback,
+          "Triple Check": triple_check}
 
 KID_EXPLAINERS = {
     "Breakout Rocket": "The coin is going up and lots of people just jumped in. If it breaks above "
                        "its top from the last 2 hours, we hop on the rocket.",
     "Dip Catcher": "The coin is going up overall, took a little rest, and is bouncing again. "
                    "We buy when the bounce keeps going.",
+    "EMA Cross": "A fast-moving average line just crossed above a slower one, and the big-picture line "
+                 "says the coin is in an uptrend. We buy when it keeps rising.",
+    "MACD 200": "The coin is in an uptrend, had a small dip, and its momentum just turned back up.",
+    "Band Bounce": "The coin dropped too far, too fast, like a stretched rubber band. We buy the snap back "
+                   "and sell at the middle.",
+    "VWAP Pullback": "The coin came back to the average price everyone paid today and bounced off it.",
+    "Triple Check": "Three different gauges all agree the coin is turning up from a dip.",
 }
 
 
@@ -116,8 +204,11 @@ def make_signal(coin, skill, idea):
     risk = entry - stop
     if risk <= 0 or not (C.MIN_RISK_PCT <= risk / entry * 100 <= C.MAX_RISK_PCT):
         return None
+    target = _sig(idea["target"]) if idea.get("target") else entry + idea.get("target_r", C.TARGET_R) * risk
+    if target < entry * (1 + C.MIN_TARGET_PCT / 100):    # too small a win to beat the spread
+        return None
     return {"coin": coin, "skill": skill, "order_type": idea["order_type"], "entry": entry, "stop": stop,
-            "target": entry + C.TARGET_R * risk, "risk_pct": round(risk / entry * 100, 2),
+            "target": target, "risk_pct": round(risk / entry * 100, 2),
             "reason": idea["reason"]}
 
 

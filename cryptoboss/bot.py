@@ -95,6 +95,39 @@ def recap_text(df, day, top, note):
     return "\n".join(lines)
 
 
+def skill_stats(df):
+    """Every skill's finished practice trades: [{skill, trades, win, avg, total, benched}], best first."""
+    from .skills import SKILLS
+    traded = df[df["status"].isin(["target", "stop", "timeout"])]
+    out = []
+    for name in SKILLS:
+        g = traded[traded["skill"] == name]
+        n = len(g)
+        avg = float(g["r_multiple"].mean()) if n else None
+        out.append({"skill": name, "trades": n, "win": 100 * float((g["r_multiple"] > 0).mean()) if n else None,
+                    "avg": avg, "total": float(g["r_multiple"].sum()) if n else 0.0,
+                    "benched": n >= C.COACH_MIN_TRADES and avg < 0})
+    return sorted(out, key=lambda s: (s["trades"] > 0, s["total"]), reverse=True)
+
+
+def benched(df):
+    return {s["skill"] for s in skill_stats(df) if s["benched"]}
+
+
+def skills_text(df):
+    lines = [f"CRYPTO BOSS [{C.MODE}] - skill scoreboard", ""]
+    for s in skill_stats(df):
+        if not s["trades"]:
+            lines.append(f"{s['skill']}: no finished trades yet")
+            continue
+        tag = " (BENCHED - losing)" if s["benched"] else ""
+        lines.append(f"{s['skill']}: {s['trades']} trades, win {s['win']:.0f}%, avg {s['avg']:+.2f}R, "
+                     f"total {s['total']:+.1f}R{tag}")
+    lines += ["", f"Benched skills keep practicing quietly. A skill needs {C.COACH_MIN_TRADES}+ trades "
+              "before the Coach judges it.", "R = what we risked: +1R means we won what we risked."]
+    return "\n".join(lines)
+
+
 def run(now=None):
     now = now or pd.Timestamp.now(tz="UTC")
     state = load_state()
@@ -139,10 +172,12 @@ def run(now=None):
             df[c] = None
     if changed:
         save_signals(df)
+    bench = benched(df)
     for s in new_sigs:
         text = signal_text(s, note)
         print(text, "\n")
-        notify.send(text)
+        if s["skill"] not in bench:            # benched skills practice quietly
+            notify.send(text)
     if done:
         text = result_text(done)
         print(text)
@@ -153,7 +188,7 @@ def run(now=None):
     day = local.strftime("%Y-%m-%d")
     if local.hour >= C.RECAP_HOUR and state.get("recap") != day:
         from .skills import wildest
-        text = recap_text(df, day, wildest(frames, now), note)
+        text = recap_text(df, day, wildest(frames, now), note) + "\n\n" + skills_text(df)
         print(text)
         notify.send(text)
         state["recap"] = day

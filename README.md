@@ -2,38 +2,37 @@
 
 ## The big idea (explained like you're 5)
 
-Lots of free Telegram channels shout "BUY THIS COIN!" Some are honest, many are not.
-Crypto Boss is a **referee**. It watches those channels all day and night, writes down every
-trade call the moment it sees one, and checks later: **did that call actually make money?**
+Crypto Boss practice-trades crypto **24/7 with fake money**, using 7 scalping "skills". 5 of them
+are the most-shared free strategies from YouTube (EMA Cross, MACD 200, Band Bounce, VWAP Pullback,
+Triple Check), written down exactly so they can be graded fairly. Every 15 minutes it looks at the
+5 wildest coins Robinhood sells and sends you any setups it finds.
 
-After 2-3 months you'll know which channels (if any) are really good, with proof.
+A **Coach** keeps score for every skill. Once a skill has 20+ finished trades and is losing on
+average, it gets **benched**: it keeps practicing quietly, but stops messaging you.
 
-**It never trades. It never uses real money.** Everything is PRACTICE.
+**It never trades. It never uses real money.** Everything is PRACTICE. We wait 2-3 months of
+good live results before even thinking about real money.
 
 ## What you'll get on Telegram (from your "Crypto Boss" bot)
 
 | When | Message |
 |---|---|
-| A channel posts a **buy** call on a coin Robinhood sells | "SIGNAL CHECKER - @channel called: BUY SOL ... CHECKING ONLY" |
-| A call finishes | "SIGNAL CHECKER - results: SOL buy: TARGET HIT +4.4%" |
-| Every night at ~9 PM New York time | The channel scoreboard: who's winning, who's losing |
+| A skill finds a setup | "CRYPTO BOSS [PRACTICE] - SOL ... Buy STOP ... Stop ... Target" |
+| A practice trade ends | "results: SOL EMA Cross: TARGET HIT +1.6R" |
+| Every night at ~9 PM New York time | Daily recap + the skill scoreboard |
 
-**You can ask the bot things** (it answers within about 15 minutes, because it only wakes up then):
-`/status` (is it working, what is it watching), `/calls` (calls it's still following),
-`/scoreboard` (how each channel is doing). It only answers you; anyone else is ignored.
+**You can ask the bot things** (it answers within about 15 minutes): `/status`, `/calls`
+(trades going now), `/scoreboard` (how each skill is doing). It only answers you.
 
-Sell/short calls and coins Robinhood doesn't have are graded quietly, without a message, so the
-scoreboard is fair. They're not messaged because you can't do them on Robinhood.
+## The fair rules
 
-## The referee's rules (so nobody can cheat)
+1. Only candles that finished **after** the signal count.
+2. If stop and target could both hit in the same candle, it's a **loss**.
+3. Robinhood's hidden **spread** (about 0.6% per round trip) is taken off every trade.
+4. Not bought within 1 hour: cancelled. Still open after 4 hours: sold.
 
-1. A call counts from the moment **we** first see it. Old posts are never imported.
-2. If a channel deletes a losing call later, **we still have it**.
-3. **No leverage.** Channels say "10x-20x" (borrowed money). We grade the plain coin.
-4. Only the **first target** counts. If the stop and target could both have hit in the same hour, it's a **loss**.
-5. Robinhood's hidden **spread** (about 0.6% per trade) is taken off every result.
-6. If the price never reaches the entry within 3 days: "never filled", no win, no loss.
-7. If a trade is still open after 14 days, it's sold at that day's price.
+The old **Signal Checker** (grading public channels) is still in the code but switched off
+(`SIGNAL_CHECKER = False` in config.py).
 
 ## Files
 
@@ -41,12 +40,13 @@ scoreboard is fair. They're not messaged because you can't do them on Robinhood.
 |---|---|
 | `channels.txt` | The channels being watched. Add or remove names freely. |
 | `coins.txt` | Coins Robinhood sells (check the app now and then). |
-| `cryptoboss/checker.py` | The referee. |
+| `cryptoboss/skills.py` | The 7 scalping skills. |
+| `cryptoboss/bot.py` | The 15-minute routine, the Coach, the messages. |
+| `cryptoboss/checker.py` | The old channel referee (switched off). |
 | `cryptoboss/channels.py` | Reads the channels' free public pages and pulls out the calls. |
 | `cryptoboss/config.py` | All the settings. |
-| `data/channel_calls.csv` | Every call ever seen, and how it ended (the bot writes this). |
+| `data/signals.csv` | Every practice trade, and how it ended (the bot writes this). |
 | `docs/index.html` | The public scoreboard page (the bot writes this). |
-| `cryptoboss/skills.py`, `bot.py` | The old quick-trades bot. **Switched OFF** because it lost money in testing. |
 
 ## Costs
 
@@ -56,7 +56,7 @@ robot. (A *private* project would use up GitHub's free minutes and could start c
 ## Commands (Actions tab, then "Crypto Boss", then "Run workflow")
 
 - `hello`: sends a test message to your Telegram
-- `scoreboard`: sends the scoreboard right now
+- `scoreboard`: sends the skill scoreboard right now
 - `run`: one normal check
 - `report`: rebuilds the scoreboard page
 

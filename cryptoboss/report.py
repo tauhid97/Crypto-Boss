@@ -58,12 +58,12 @@ table{{border-collapse:collapse;width:100%;font-size:13px}} td,th{{border-bottom
 .wrap{{overflow-x:auto}} .win{{color:var(--win)}} .loss{{color:var(--loss)}} .muted{{color:var(--muted)}}
 </style></head><body>
 <h1>Crypto Boss Scoreboard</h1>
-<h2>Signal Checker: free channels, graded</h2>
+<h2>Signal Checker: free channels (switched off)</h2>
 <p class="muted">Every trade call these public channels post, graded from the moment we first saw it. No leverage,
 only the first target counts, Robinhood's spread taken off. "RH buys" = buy calls on coins Robinhood sells.</p>
 <div class="wrap"><table><tr><th>Channel</th><th>Calls</th><th>Graded</th><th>Win</th><th>Avg</th><th>Total</th>
 <th>RH buys</th><th>RH avg</th></tr>{channel_rows}</table></div>
-<h2>Quick trades (switched off)</h2>
+<h2>Practice scalping (24/7)</h2>
 <p><b>{C.MODE}</b> &middot; {stats}</p>
 <p class="muted">Every signal, win or lose. Robinhood's spread (about {C.SPREAD_PCT * 200:.1f}% per trade) is already taken off.
 R = what we risked: +2R means we won twice what we risked. Updated {pd.Timestamp.now(tz=C.TIMEZONE):%b %d %I:%M %p} ET.</p>

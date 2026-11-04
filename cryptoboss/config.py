@@ -13,9 +13,15 @@ COMMANDS_STATE_FILE = "data/commands_state.json"   # which Telegram messages fro
 # PRACTICE until the track record has looked good for 2-3 months. There is no "live" mode yet on purpose.
 MODE = "PRACTICE"
 
-# The quick-trades skills lost money in a 30-day replay (-0.47R a trade after the spread), so they're OFF.
-# The Signal Checker is what runs. Set True only to collect practice data on the quick trades.
-QUICK_TRADES = False
+# Scalping skills run 24/7 in PRACTICE (fake money) so we can see live which ones (if any) really win.
+QUICK_TRADES = True
+# The Signal Checker (grading public channels) is switched off - Boss wants our own trades instead.
+SIGNAL_CHECKER = False
+
+# --- Coach: benches skills that keep losing ---
+# After a skill has COACH_MIN_TRADES finished practice trades, if its average is below 0R it is "benched":
+# it keeps practice trading quietly (so it can earn its way back), but its signals are no longer messaged.
+COACH_MIN_TRADES = 20
 
 # --- Signal Checker (grades calls from public channels) ---
 CALL_ENTRY_WINDOW = "3D"           # price must reach the channel's entry within 3 days, or it's "never filled"
@@ -32,6 +38,7 @@ STORM_DROP_PCT = -2.0              # Bitcoin down 2%+ in the last 4 hours = stor
 TARGET_R = 2.0                     # aim to win 2x what we risk
 MIN_RISK_PCT = 1.0                 # stop at least 1% away, so the 2x target (2%+) beats Robinhood's spread
 MAX_RISK_PCT = 6.0
+MIN_TARGET_PCT = 1.2               # skip trades whose target is less than 1.2% away (the spread would eat it)
 ENTRY_WINDOW = "1h"                # if the price doesn't reach the entry within 1 hour, cancel
 MAX_HOLD = "4h"                    # sell after 4 hours no matter what
 COOLDOWN = "2h"                    # wait 2 hours before a new signal on the same coin

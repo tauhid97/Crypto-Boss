@@ -3,9 +3,9 @@
 The bot only wakes up every ~15 minutes, so answers can take that long. It only ever
 answers Boss's own chat (TELEGRAM_CHAT_ID); messages from anyone else are ignored.
 
-  /status       am I awake, when did I last check, how many calls am I following
-  /calls        the calls still waiting or in a trade
-  /scoreboard   the channel scoreboard right now
+  /status       am I awake, when did I last check, how are the practice trades doing
+  /calls        the practice trades still waiting or open
+  /scoreboard   the skill scoreboard right now
   anything else this help message
 """
 import json
@@ -16,14 +16,15 @@ import requests
 
 from . import config as C
 from . import notify
-from .checker import ACTIVE, load_calls, load_state, scoreboard_text
-from .skills import money
+from .bot import load_signals, skills_text
+from .skills import SKILLS, money
+from .tracker import ACTIVE
 
 HELP = ("Hi Boss! I wake up about every 15 minutes, so my answers can take that long.\n"
         "Things you can ask me:\n"
-        "/status - am I working, and what am I watching\n"
-        "/calls - the calls I'm still following\n"
-        "/scoreboard - how each channel is doing")
+        "/status - am I working, and how is practice going\n"
+        "/calls - the practice trades still waiting or open\n"
+        "/scoreboard - how each skill is doing")
 
 
 def get_updates(offset):
@@ -37,44 +38,45 @@ def get_updates(offset):
     return r.json().get("result", []) if r.ok else []
 
 
-def status_text(calls, now):
-    active = calls[calls["status"].isin(ACTIVE)]
-    done = calls[calls["status"].isin(["target", "stop", "timeout"])]
-    watching = len(load_state().get("last_id", {}))
+def status_text(sigs, now):
+    active = sigs[sigs["status"].isin(ACTIVE)]
+    done = sigs[sigs["status"].isin(["target", "stop", "timeout"])]
     t = now.tz_convert(C.TIMEZONE)
-    return "\n".join([
-        f"I'm awake, Boss! Checked at {t:%I:%M %p} ET ({t:%a %b %d}).".replace(" 0", " "),
-        f"Watching {watching} channels.",
-        f"Calls I'm following: {len(active)} ({(active['status'] == 'waiting').sum()} waiting for their entry, "
-        f"{(active['status'] == 'open').sum()} in a trade).",
-        f"Finished and graded so far: {len(done)}.",
-        "Everything is PRACTICE - no real money."])
+    lines = [f"I'm awake, Boss! Checked at {t:%I:%M %p} ET ({t:%a %b %d}).".replace(" 0", " "),
+             f"Practice scalping with {len(SKILLS)} skills on the wildest Robinhood coins, 24/7.",
+             f"Trades going now: {len(active)} ({(active['status'] == 'pending').sum()} waiting to buy, "
+             f"{(active['status'] == 'open').sum()} bought)."]
+    if len(done):
+        lines.append(f"Finished so far: {len(done)}, win {100 * (done['r_multiple'] > 0).mean():.0f}%, "
+                     f"total {done['r_multiple'].sum():+.1f}R.")
+    else:
+        lines.append("No finished trades yet.")
+    lines.append("Everything is PRACTICE - no real money.")
+    return "\n".join(lines)
 
 
-def calls_text(calls):
-    active = calls[calls["status"].isin(ACTIVE)]
+def calls_text(sigs):
+    active = sigs[sigs["status"].isin(ACTIVE)]
     if not len(active):
-        return "No calls I'm following right now - none are waiting or open."
-    lines = [f"Calls I'm following ({len(active)}):", ""]
+        return "No practice trades going right now - none are waiting or open."
+    lines = [f"Practice trades going now ({len(active)}):", ""]
     for _, c in active.head(15).iterrows():
-        side = "BUY" if c["side"] == "long" else "SHORT"
-        where = "in the trade" if c["status"] == "open" else "waiting for entry"
-        rh = "" if c["robinhood"] in (True, "True") else " (not doable on Robinhood)"
-        lines.append(f"@{c['channel']}: {side} {c['coin']} - {where}{rh}")
+        where = "bought" if c["status"] == "open" else "waiting to buy"
+        lines.append(f"{c['coin']} ({c['skill']}) - {where}")
         lines.append(f"   Entry {money(c['entry'])} | Stop {money(c['stop'])} | Target {money(c['target'])}")
     if len(active) > 15:
         lines.append(f"...and {len(active) - 15} more.")
     return "\n".join(lines)
 
 
-def answer(text, calls, now):
+def answer(text, sigs, now):
     word = (text or "").strip().split()[0].split("@")[0].lower() if (text or "").strip() else ""
     if word == "/status":
-        return status_text(calls, now)
+        return status_text(sigs, now)
     if word == "/calls":
-        return calls_text(calls)
+        return calls_text(sigs)
     if word == "/scoreboard":
-        return scoreboard_text(calls)
+        return skills_text(sigs)
     return HELP
 
 
@@ -86,11 +88,11 @@ def handle(now=None):
     updates = get_updates(offset)
     if not updates:
         return
-    calls = load_calls()
+    sigs = load_signals()
     for u in sorted(updates, key=lambda u: u["update_id"]):
         m = u.get("message") or {}
         if boss and str((m.get("chat") or {}).get("id")) == boss and "text" in m:
-            notify.send(answer(m["text"], calls, now))
+            notify.send(answer(m["text"], sigs, now))
     state["next_update"] = max(u["update_id"] for u in updates) + 1
     os.makedirs(os.path.dirname(C.COMMANDS_STATE_FILE), exist_ok=True)
     json.dump(state, open(C.COMMANDS_STATE_FILE, "w"), indent=1)
