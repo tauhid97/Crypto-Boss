@@ -1,5 +1,5 @@
 id,published_at,coin,skill,order_type,entry,stop,target,risk_pct,reason,status,fill_time,fill_price,exit_time,exit_price,r_multiple,pct_return
 202611040446-PEPE,2026-11-04T04:46:17.885811+00:00,PEPE,EMA Cross,buy_stop,4.85485e-06,4.75048e-06,5.063589999999999e-06,2.15,"Fast line (9) crossed above slow line (21), and price is above the 200 line",open,2026-11-04T05:00:00+00:00,4.88e-06,,,,
 202611040446-ONDO,2026-11-04T04:46:17.885811+00:00,ONDO,Breakout Rocket,buy_stop,0.388108,0.383287,0.39775000000000005,1.24,Loud green candle (1.8x volume) pushing on its 2-hour high,target,2026-11-04T05:00:00+00:00,0.38994,2026-11-04T05:45:00+00:00,0.39775000000000005,1.13,1.393
-202611040548-UNI,2026-11-04T05:48:39.334968+00:00,UNI,Breakout Rocket,buy_stop,7.28498,7.18082,7.4933000000000005,1.43,Loud green candle (2.4x volume) pushing on its 2-hour high,open,2026-11-04T06:00:00+00:00,7.2981,,,,
+202611040548-UNI,2026-11-04T05:48:39.334968+00:00,UNI,Breakout Rocket,buy_stop,7.28498,7.18082,7.4933000000000005,1.43,Loud green candle (2.4x volume) pushing on its 2-hour high,target,2026-11-04T06:00:00+00:00,7.2981,2026-11-04T07:30:00+00:00,7.4933000000000005,1.448,2.06
 202611040548-AAVE,2026-11-04T05:48:39.334968+00:00,AAVE,Breakout Rocket,buy_stop,129.339,127.745,132.527,1.23,Loud green candle (7.0x volume) pushing on its 2-hour high,open,2026-11-04T06:30:00+00:00,129.339,,,,
