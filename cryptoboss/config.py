@@ -18,10 +18,16 @@ QUICK_TRADES = True
 # The Signal Checker (grading public channels) is switched off - Boss wants our own trades instead.
 SIGNAL_CHECKER = False
 
-# --- Coach: benches skills that keep losing ---
-# After a skill has COACH_MIN_TRADES finished practice trades, if its average is below 0R it is "benched":
-# it keeps practice trading quietly (so it can earn its way back), but its signals are no longer messaged.
-COACH_MIN_TRADES = 20
+# --- Coach: quick to bench, slow to trust ---
+# BENCHED: after just 3 finished trades, if its last (up to) 10 trades average below -0.10R. It keeps
+#   practicing quietly (so it can earn its way back), but its signals are no longer messaged.
+# TRUSTED: its last 5 trades average above +0.10R. Its signals get the full message. (A trusted skill is
+#   never benched.) Every other skill is still LEARNING: its signals come as short one-liners.
+COACH_BENCH_TRADES = 3
+COACH_BENCH_R = -0.10
+COACH_LOOKBACK = 10
+COACH_TRUST_TRADES = 5
+COACH_TRUST_R = 0.10
 
 # --- Signal Checker (grades calls from public channels) ---
 CALL_ENTRY_WINDOW = "3D"           # price must reach the channel's entry within 3 days, or it's "never filled"
@@ -43,8 +49,12 @@ ENTRY_WINDOW = "1h"                # if the price doesn't reach the entry within
 MAX_HOLD = "4h"                    # sell after 4 hours no matter what
 DAY_ENTRY_WINDOW = "4h"            # day skills (Wake-Up Rally): 4 hours to get bought
 DAY_MAX_HOLD = "24h"               # ...and they may hold up to 1 day (the test needed the full day)
-COOLDOWN = "2h"                    # wait 2 hours before a new signal on the same coin
-MAX_NEW_PER_RUN = 2
+COOLDOWN = "2h"                    # each skill waits 2 hours before a new signal on the same coin
+# More practice = faster learning: every skill may trade the same coin (one active trade per coin per skill),
+# up to 3 new trades per skill per day and 30 in total per day (days start at midnight UTC).
+SKILL_DAILY_CAP = 3
+DAILY_CAP = 30
+MAX_NEW_PER_RUN = 8
 
 # --- Costs ---
 # Robinhood crypto has no fee but builds in a "spread": you pay a bit more to buy and get a bit less

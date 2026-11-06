@@ -7,7 +7,7 @@ import pandas as pd
 from . import config as C
 from . import notify, report
 from .data import daily, get_all
-from .skills import KID_EXPLAINERS, find_day, find_new, money, prepare
+from .skills import DAY_SKILLS, KID_EXPLAINERS, find_day, find_new, money, prepare, weather
 from .tracker import ACTIVE, settle
 
 COLS = ["id", "published_at", "coin", "skill", "order_type", "entry", "stop", "target", "risk_pct",
@@ -99,22 +99,44 @@ def recap_text(df, day, top, note):
 
 
 def skill_stats(df):
-    """Every skill's finished practice trades: [{skill, trades, win, avg, total, benched}], best first."""
+    """Every skill's finished practice trades: [{skill, trades, win, avg, total, benched, trusted}], best first."""
     from .skills import ALL_SKILLS
     traded = df[df["status"].isin(["target", "stop", "timeout"])]
+    if "exit_time" in traded:
+        traded = traded.assign(_t=pd.to_datetime(traded["exit_time"], utc=True, errors="coerce")).sort_values(
+            "_t", kind="stable")
     out = []
     for name in ALL_SKILLS:
         g = traded[traded["skill"] == name]
         n = len(g)
-        avg = float(g["r_multiple"].mean()) if n else None
-        out.append({"skill": name, "trades": n, "win": 100 * float((g["r_multiple"] > 0).mean()) if n else None,
-                    "avg": avg, "total": float(g["r_multiple"].sum()) if n else 0.0,
-                    "benched": n >= C.COACH_MIN_TRADES and avg < 0})
+        r = g["r_multiple"].astype(float)
+        avg = float(r.mean()) if n else None
+        trust = n >= C.COACH_TRUST_TRADES and r.tail(C.COACH_TRUST_TRADES).mean() > C.COACH_TRUST_R
+        bench = (not trust and n >= C.COACH_BENCH_TRADES
+                 and r.tail(C.COACH_LOOKBACK).mean() < C.COACH_BENCH_R)
+        out.append({"skill": name, "trades": n, "win": 100 * float((r > 0).mean()) if n else None,
+                    "avg": avg, "total": float(r.sum()) if n else 0.0,
+                    "benched": bool(bench), "trusted": bool(trust)})
     return sorted(out, key=lambda s: (s["trades"] > 0, s["total"]), reverse=True)
 
 
 def benched(df):
     return {s["skill"] for s in skill_stats(df) if s["benched"]}
+
+
+def trusted(df):
+    return {s["skill"] for s in skill_stats(df) if s["trusted"]}
+
+
+def short_text(signals):
+    """Learning skills' signals: one short line each, all in one message, so Telegram stays readable."""
+    lines = [f"CRYPTO BOSS [{C.MODE}] - learning skills' practice trades (short form)"]
+    for s in signals:
+        hold = pd.Timedelta(s.get("max_hold") or C.MAX_HOLD).total_seconds() / 3600
+        lines.append(f"{s['coin']} {s['skill']}: buy if it climbs to {money(s['entry'])}, "
+                     f"stop {money(s['stop'])}, target {money(s['target'])}, max {hold:.0f}h")
+    lines.append("These skills are still learning. The Coach sends full messages once a skill has earned trust.")
+    return "\n".join(lines)
 
 
 def skills_text(df):
@@ -123,11 +145,13 @@ def skills_text(df):
         if not s["trades"]:
             lines.append(f"{s['skill']}: no finished trades yet")
             continue
-        tag = " (BENCHED - losing)" if s["benched"] else ""
+        tag = " (BENCHED - losing)" if s["benched"] else " (TRUSTED - winning lately)" if s["trusted"] else ""
         lines.append(f"{s['skill']}: {s['trades']} trades, win {s['win']:.0f}%, avg {s['avg']:+.2f}R, "
                      f"total {s['total']:+.1f}R{tag}")
-    lines += ["", f"Benched skills keep practicing quietly. A skill needs {C.COACH_MIN_TRADES}+ trades "
-              "before the Coach judges it.", "R = what we risked: +1R means we won what we risked."]
+    lines += ["", f"Coach: quick to bench, slow to trust. Benched = {C.COACH_BENCH_TRADES}+ trades and its last "
+              f"{C.COACH_LOOKBACK} average below {C.COACH_BENCH_R:+.2f}R (keeps practicing quietly). Trusted = last "
+              f"{C.COACH_TRUST_TRADES} average above {C.COACH_TRUST_R:+.2f}R (full messages). The rest send short lines.",
+              "R = what we risked: +1R means we won what we risked."]
     return "\n".join(lines)
 
 
@@ -160,16 +184,23 @@ def run(now=None):
             if new["status"] not in ACTIVE:
                 done.append(new)
 
-    # 2) Scout: look for new signals (one active signal per coin, plus a cooldown)
+    # 2) Scout: look for new signals (one active signal per coin per skill, a cooldown, and daily caps)
     cool = now - pd.Timedelta(C.COOLDOWN)
-    blocked = set(df.loc[df["status"].isin(ACTIVE), "coin"])
-    blocked |= {c for c, t in zip(df["coin"], df["published_at"]) if pd.Timestamp(t) > cool}
-    new_sigs, w, note = find_new(frames, now, blocked)
-    # day skills (Wake-Up Rally): every coin, at most once per coin per UTC day
     today = now.floor("1D")
-    skip = {(c, k) for c, k, t in zip(df["coin"], df["skill"], df["published_at"]) if pd.Timestamp(t) >= today}
-    blocked |= {s["coin"] for s in new_sigs}
-    new_sigs += find_day(frames, daily, now, blocked, skip)
+    pairs = list(zip(df["coin"], df["skill"], df["published_at"], df["status"]))
+    blocked = {(c, k) for c, k, t, st in pairs if st in ACTIVE or pd.Timestamp(t) > cool}
+    made = pd.Series([k for c, k, t, st in pairs if pd.Timestamp(t) >= today], dtype=object).value_counts()
+    left = {k: C.SKILL_DAILY_CAP - int(n) for k, n in made.items()}
+    room = C.DAILY_CAP - int(made.sum())
+    if room > 0:
+        new_sigs, w, note = find_new(frames, now, blocked, left, room)
+    else:
+        new_sigs, (w, note) = [], weather(frames, now)
+    # day skills (Wake-Up Rally): every coin, at most once per coin per UTC day
+    skip = {(c, k) for c, k, t, st in pairs if pd.Timestamp(t) >= today}
+    busy = {c for c, k, t, st in pairs if st in ACTIVE and k in DAY_SKILLS}   # a day skill already in this coin
+    if room - len(new_sigs) > 0:
+        new_sigs += find_day(frames, daily, now, busy, skip)
     for s in new_sigs:
         s.update(id=f"{now:%Y%m%d%H%M}-{s['coin']}", published_at=now.isoformat(), status="pending")
         df = pd.concat([df, pd.DataFrame([s])], ignore_index=True) if len(df) else pd.DataFrame([s])
@@ -180,12 +211,21 @@ def run(now=None):
             df[c] = None
     if changed:
         save_signals(df)
-    bench = benched(df)
+    bench, trust = benched(df), trusted(df)
+    short = []
     for s in new_sigs:
         text = signal_text(s, note)
         print(text, "\n")
-        if s["skill"] not in bench:            # benched skills practice quietly
+        if s["skill"] in bench:                # benched skills practice quietly
+            continue
+        if s["skill"] in trust:                # trusted skills get the full message
             notify.send(text)
+        else:
+            short.append(s)
+    if len(short) == 1:                        # just one: the full message is still easy to read
+        notify.send(signal_text(short[0], note))
+    elif short:
+        notify.send(short_text(short))
     if done:
         text = result_text(done)
         print(text)

@@ -7,8 +7,14 @@ are the most-shared free strategies from YouTube (EMA Cross, MACD 200, Band Boun
 Triple Check), written down exactly so they can be graded fairly. Every 15 minutes it looks at the
 5 wildest coins Robinhood sells and sends you any setups it finds.
 
-A **Coach** keeps score for every skill. Once a skill has 20+ finished trades and is losing on
-average, it gets **benched**: it keeps practicing quietly, but stops messaging you.
+A **Coach** keeps score for every skill: **quick to bench, slow to trust**.
+- After just 3 finished trades, a skill whose last 10 trades average below -0.10R is **benched**: it keeps
+  practicing quietly, but stops messaging you.
+- A skill whose last 5 trades average above +0.10R is **trusted**: you get its full message.
+- Every other skill is still **learning**: its trades come as short one-line messages.
+
+**More practice = faster learning** (Nov 5, 2026): every skill may trade the same coin, up to 3 new
+practice trades per skill per day and 30 in total.
 
 **Wake-Up Rally** (added Nov 4, 2026) is borrowed from the stock bot. It checks *every* coin (not just
 the 5 wildest): a coin down 15%+ in 60 days that suddenly jumps 3%+ today on 2x its usual volume. It buys

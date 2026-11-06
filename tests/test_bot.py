@@ -132,11 +132,18 @@ def test_live():
     print(sig[["published_at", "coin", "skill", "entry", "stop", "status", "r_multiple"]].tail(15).to_string())
     assert len(sig), "no signals at all"
     assert set(sig["status"]) - {"pending", "open"}, "nothing ever finished"
-    # never two active signals on one coin at the same time
-    for c, g in sig.groupby("coin"):
+    # each skill: never two signals on one coin within the cooldown
+    for (c, k), g in sig.groupby(["coin", "skill"]):
         times = pd.to_datetime(g["published_at"]).sort_values()
-        assert (times.diff().dropna() >= pd.Timedelta(C.COOLDOWN)).all(), (c, times)
-    new = [s for s in sent if "CRYPTO BOSS" in s and "Buy" in s]
+        assert (times.diff().dropna() >= pd.Timedelta(C.COOLDOWN)).all(), (c, k, times)
+    # daily caps: 3 per skill, 30 in total (UTC days)
+    day = pd.to_datetime(sig["published_at"], utc=True).dt.floor("1D")
+    assert sig.groupby([day, sig["skill"]]).size().max() <= C.SKILL_DAILY_CAP, sig.groupby([day, sig["skill"]]).size()
+    assert sig.groupby(day).size().max() <= C.DAILY_CAP
+    # more practice than before: some coin was traded by 2+ skills at once
+    print("signals:", len(sig), "| skills sharing a coin at once:",
+          sig.groupby(["coin", "published_at"]).size().max())
+    new = [s for s in sent if "CRYPTO BOSS" in s and ("Buy" in s or "short form" in s)]
     res = [s for s in sent if "] - results" in s]
     recaps = [s for s in sent if "recap" in s.lower()]
     assert new and res and 1 <= len(recaps) <= 3, (len(new), len(res), len(recaps))
@@ -148,6 +155,9 @@ def test_live():
     bot.run(now=end); bot.run(now=end + pd.Timedelta(minutes=15))
     assert len(sent) == 1, sent
     print("\n--- sample signal ---\n" + new[0])
+    shorts = [s for s in sent if "short form" in s]
+    if shorts:
+        print("\n--- sample short form ---\n" + shorts[0])
     print("\n--- sample result ---\n" + res[0])
     print("\n--- sample recap ---\n" + recaps[0])
     print("live OK")

@@ -289,22 +289,32 @@ def make_signal(coin, skill, idea):
             "reason": idea["reason"]}
 
 
-def find_new(frames, t, blocked):
-    """New signals at time t among the wildest coins. blocked = coins we must skip right now."""
+def find_new(frames, t, blocked, left=None, room=None):
+    """New signals at time t among the wildest coins. blocked = coins, or (coin, skill) pairs, to skip right now.
+    Without left/room (the backtest): first skill that fires takes the coin. With them (the live bot): every skill
+    may take the coin; left = {skill: new trades it may still make today}, room = total still allowed today."""
     w, note = weather(frames, t)
     out = []
     if w == "stormy":
         return out, w, note
+    many = left is not None
+    cap = C.MAX_NEW_PER_RUN if room is None else min(C.MAX_NEW_PER_RUN, room)
     for coin in wildest(frames, t):
         if coin in blocked:
             continue
         df = frames[coin]
         i = row_at(df, t)
         for name, fn in SKILLS.items():
+            if len(out) >= cap:
+                return out, w, note
+            if many and ((coin, name) in blocked or left.get(name, C.SKILL_DAILY_CAP) <= 0):
+                continue
             idea = fn(df, i)
             if idea and (s := make_signal(coin, name, idea)):
                 out.append(s)
-                break
-        if len(out) >= C.MAX_NEW_PER_RUN:
+                if not many:
+                    break
+                left[name] = left.get(name, C.SKILL_DAILY_CAP) - 1
+        if len(out) >= cap:
             break
     return out, w, note
