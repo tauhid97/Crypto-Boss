@@ -14,7 +14,8 @@ ACTIVE = {"pending", "open"}
 def _close(sig, price, ts, status):
     fill = sig["fill_price"] * (1 + C.SPREAD_PCT)
     out = price * (1 - C.SPREAD_PCT)
-    risk = sig["entry"] - sig["stop"]
+    base = sig["fill_price"] if sig.get("order_type") == "dip_bounce" else sig["entry"]
+    risk = base - sig["stop"]                  # dip twins: risk from the real buy price
     sig.update(status=status, exit_price=float(price), exit_time=ts.isoformat(),
                r_multiple=round((out - fill) / risk, 3), pct_return=round((out / fill - 1) * 100, 3))
     return sig
@@ -32,6 +33,8 @@ def settle(sig, bars, now):
     entry, stop, target = sig["entry"], sig["stop"], sig["target"]
     step = pd.Timedelta(C.CANDLE)
     filled_at = pd.Timestamp(sig["fill_time"]) if sig.get("status") == "open" else None
+    dip = sig.get("order_type") == "dip_bounce"
+    dipped = False
     for ts, b in bars[bars.index >= pub].iterrows():
         if ts + step > now:
             break
@@ -39,10 +42,24 @@ def settle(sig, bars, now):
             if ts >= pub + window:
                 sig.update(status="no_fill", r_multiple=0.0, pct_return=0.0, exit_time=ts.isoformat())
                 return sig
-            if b["High"] < entry:
-                continue
+            if dip:                                    # dip twin: wait for a drop, then proof of a bounce
+                dipped = dipped or b["Low"] <= entry
+                if not dipped:
+                    continue
+                if b["Low"] <= stop:                   # kept falling to the safety price: never bought
+                    sig.update(status="no_fill", r_multiple=0.0, pct_return=0.0, exit_time=ts.isoformat())
+                    return sig
+                if not (b["Close"] > b["Open"] and b["Close"] > entry and b["Close"] < target):
+                    continue                           # no green candle back above the dip price yet
+                filled_at = ts                         # bought at the bounce candle's close;
+                sig.update(status="open", fill_time=ts.isoformat(), fill_price=float(b["Close"]))
+                continue                               # selling starts with the next candle
+            else:                                      # climb order: buy only when the price RISES to the entry
+                if b["High"] < entry:
+                    continue
+                price = max(entry, b["Open"])
             filled_at = ts
-            sig.update(status="open", fill_time=ts.isoformat(), fill_price=float(max(entry, b["Open"])))
+            sig.update(status="open", fill_time=ts.isoformat(), fill_price=float(price))
             if b["Low"] <= stop:                       # stopped in the same candle we got in
                 return _close(sig, stop, ts, "stop")
             continue

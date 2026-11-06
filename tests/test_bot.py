@@ -61,6 +61,29 @@ def test_settle():
     # an open signal keeps settling on later runs
     r7 = settle(dict(r6), b5, t0 + pd.Timedelta(hours=6))
     assert r7["status"] == "timeout" and r7["fill_price"] == 10.0, r7
+    # dip twin (dip_bounce): waits for the price to DROP to the entry, then buys only after a
+    # green candle closes back ABOVE the entry (proof it is bouncing up), at that candle's close
+    dip = dict(sig, order_type="dip_bounce", entry=10.0, stop=9.8, target=10.4)
+    b8 = bars(t0, [(10.2, 10.3, 10.1, 10.2),      # no dip yet
+                   (10.15, 10.2, 9.95, 9.98),     # dips to the entry, still falling: wait
+                   (9.98, 10.1, 9.97, 10.08),     # green, closes back above 10: buy at 10.08
+                   (10.1, 10.5, 10.05, 10.45)])   # target
+    r8 = settle(dict(dip), b8, t0 + pd.Timedelta(hours=1))
+    assert r8["status"] == "target" and r8["fill_price"] == 10.08 and r8["fill_time"] == b8.index[2].isoformat(), r8
+    assert 0.8 < r8["r_multiple"] < 1.0, r8                 # risk counted from the real buy price
+    # keeps falling to the stop before any bounce -> never bought (that's the point)
+    b9 = bars(t0, [(10.15, 10.2, 9.95, 9.98), (9.97, 9.98, 9.75, 9.78), (9.8, 10.3, 9.8, 10.2)])
+    r9 = settle(dict(dip), b9, t0 + pd.Timedelta(hours=1))
+    assert r9["status"] == "no_fill" and r9["r_multiple"] == 0, r9
+    # price only goes up -> never dips -> never bought
+    b10 = bars(t0, [(10.1, 10.3, 10.05, 10.2)] * 8)
+    assert settle(dict(dip), b10, t0 + pd.Timedelta(hours=2))["status"] == "no_fill"
+    # dips and bounces in the same candle (long tail, green close above) -> bought at its close
+    b11 = bars(t0, [(9.98, 10.15, 9.9, 10.05), (10.05, 10.1, 10.0, 10.06)])
+    r11 = settle(dict(dip), b11, t0 + pd.Timedelta(minutes=30))
+    assert r11["status"] == "open" and r11["fill_price"] == 10.05, r11
+    # dipped, still waiting for the bounce -> stays pending
+    assert settle(dict(dip), b8.iloc[:2], t0 + pd.Timedelta(minutes=30))["status"] == "pending"
     print("settle OK")
 
 
@@ -136,7 +159,7 @@ def test_live():
     for (c, k), g in sig.groupby(["coin", "skill"]):
         times = pd.to_datetime(g["published_at"]).sort_values()
         assert (times.diff().dropna() >= pd.Timedelta(C.COOLDOWN)).all(), (c, k, times)
-    # daily caps: 3 per skill, 30 in total (UTC days)
+    # daily caps: 3 per skill, 45 in total (UTC days)
     day = pd.to_datetime(sig["published_at"], utc=True).dt.floor("1D")
     assert sig.groupby([day, sig["skill"]]).size().max() <= C.SKILL_DAILY_CAP, sig.groupby([day, sig["skill"]]).size()
     assert sig.groupby(day).size().max() <= C.DAILY_CAP
@@ -144,10 +167,11 @@ def test_live():
     print("signals:", len(sig), "| skills sharing a coin at once:",
           sig.groupby(["coin", "published_at"]).size().max())
     new = [s for s in sent if "CRYPTO BOSS" in s and ("Buy" in s or "short form" in s)]
-    res = [s for s in sent if "] - results" in s]
-    recaps = [s for s in sent if "recap" in s.lower()]
+    res = [s for s in sent if "practice results" in s]
+    recaps = [s for s in sent if "practice report" in s]
     assert new and res and 1 <= len(recaps) <= 3, (len(new), len(res), len(recaps))
-    assert all("PRACTICE" in s for s in new)
+    assert all("practice" in s.lower() for s in new)
+    assert any("DROP to" in s for s in new) and any("RISES to" in s for s in new)   # dip twins and climb skills
     assert os.path.exists(C.REPORT_FILE) and "Crypto Boss" in open(C.REPORT_FILE).read()
     # a run with no data tells Boss once a day, not every 15 minutes
     sent.clear()

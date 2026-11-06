@@ -42,7 +42,7 @@ def test_commands():
     assert "awake" in sent[0].lower() and "Trades going now: 2" in sent[0] and "3:15 PM" in sent[0], sent[0]
     assert "+1.2R" in sent[0], sent[0]
     assert "SUI" in sent[1] and "PEPE" in sent[1] and "LINK" not in sent[1], sent[1]   # only trades still going
-    assert "skill scoreboard" in sent[2].lower() and "MACD 200: 1 trades" in sent[2], sent[2]
+    assert "skill scoreboard" in sent[2].lower() and "MACD 200: 1 trade, 1 won" in sent[2], sent[2]
     assert "/scoreboard" in sent[3] and "/calls" in sent[3]                       # unknown -> help
     assert "awake" in sent[4].lower()                                              # works with @botname too
     # next run: Telegram is told we already read up to 15, nothing is answered twice

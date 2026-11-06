@@ -246,15 +246,43 @@ def find_day(frames, get_daily, t, blocked, skip):
             if idea and (s := make_signal(coin, name, idea)):
                 s.update(entry_window=C.DAY_ENTRY_WINDOW, max_hold=C.DAY_MAX_HOLD)
                 out.append(s)
-                break
         if len(out) >= C.MAX_NEW_PER_RUN:
             break
     return out
 
 
-SKILLS = {"Breakout Rocket": breakout_rocket, "Dip Catcher": dip_catcher, "EMA Cross": ema_cross,
-          "MACD 200": macd_200, "Band Bounce": band_bounce, "VWAP Pullback": vwap_pullback,
-          "Triple Check": triple_check}
+# --- dip twins: the same setups, but we wait for a small drop, then buy only after a green bounce candle ---
+
+def dip_twin(fn):
+    """Same setup as fn, but wait for a dip a little under the last price, then buy on a green bounce candle."""
+    def twin(df, i):
+        idea = fn(df, i)
+        if not idea:
+            return None
+        r = df.iloc[i]
+        entry = r["Close"] - C.DIP_ATR * r["ATR"]
+        return dict(idea, order_type="dip_bounce", entry=entry, stop=min(idea["stop"], entry - r["ATR"]),
+                    reason=idea["reason"] + " - dip version: buy only after it dips, then bounces back up")
+    twin.__doc__ = f"Dip twin of {fn.__name__}."
+    return twin
+
+
+def wake_up_rally_dip(x):
+    """Dip twin of Wake-Up Rally: same coin and day, but buy halfway back down to today's average price."""
+    idea = wake_up_rally(x)
+    if not idea:
+        return None
+    entry = (x["last"] + x["vwap"]) / 2
+    return dict(idea, order_type="dip_bounce", entry=entry, stop=min(x["vwap"] * 0.99, entry - 0.5 * x["atr"]),
+                reason=idea["reason"].replace("buy if it makes a new high", "buy only after it dips halfway back, then bounces up"))
+
+
+DAY_SKILLS["Wake-Up Rally (Dip)"] = wake_up_rally_dip
+
+BASE_SKILLS = {"Breakout Rocket": breakout_rocket, "Dip Catcher": dip_catcher, "EMA Cross": ema_cross,
+               "MACD 200": macd_200, "Band Bounce": band_bounce, "VWAP Pullback": vwap_pullback,
+               "Triple Check": triple_check}
+SKILLS = {**BASE_SKILLS, **{f"{k} (Dip)": dip_twin(f) for k, f in BASE_SKILLS.items()}}
 ALL_SKILLS = {**SKILLS, **DAY_SKILLS}
 
 KID_EXPLAINERS = {
@@ -272,6 +300,8 @@ KID_EXPLAINERS = {
     "Wake-Up Rally": "This coin has been sliding down for months. Today it suddenly woke up and is jumping "
                      "on lots of buying. If it keeps climbing to a new high, we buy, and may hold up to 1 day.",
 }
+DIP_WORDS = " Dip version: we wait for a small drop, then buy only once a candle closes green back above the dip price (proof it is bouncing up, not still falling)."
+KID_EXPLAINERS.update({f"{k} (Dip)": v + DIP_WORDS for k, v in list(KID_EXPLAINERS.items())})
 
 
 def make_signal(coin, skill, idea):

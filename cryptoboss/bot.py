@@ -13,9 +13,16 @@ from .tracker import ACTIVE, settle
 COLS = ["id", "published_at", "coin", "skill", "order_type", "entry", "stop", "target", "risk_pct",
         "reason", "status", "fill_time", "fill_price", "exit_time", "exit_price", "r_multiple", "pct_return",
         "entry_window", "max_hold"]
-DISCLAIMER = ("Practice signals for learning only, not financial advice. Crypto is very risky and can "
-              "drop fast. Past results do not guarantee future results.")
-WORDS = {"target": "TARGET HIT", "stop": "STOPPED OUT", "timeout": "SOLD (time's up)", "no_fill": "NEVER BOUGHT"}
+DISCLAIMER = "Practice only (fake money). Not money advice. Crypto can drop fast."
+WORDS = {"target": "WIN - hit the sell-high price", "stop": "LOSS - hit the safety price",
+         "timeout": "time's up - sold", "no_fill": "never bought (price didn't get there)"}
+
+
+def buy_words(s):
+    """How to buy, in plain words: dip orders wait for a drop, climb orders wait for a rise."""
+    if s.get("order_type") == "dip_bounce":
+        return f"wait for the price to DROP to {money(s['entry'])}, then buy only once it bounces back above it"
+    return f"buy if the price RISES to {money(s['entry'])}"
 
 
 def load_coins():
@@ -55,14 +62,14 @@ def signal_text(s, weather_note):
                     pd.Timedelta(s.get("max_hold") or C.MAX_HOLD))
     cancel = et(pub + window)
     return "\n".join([
-        f"CRYPTO BOSS [{C.MODE}] - {s['coin']}",
+        f"CRYPTO BOSS - practice trade: {s['coin']}",
         f"Skill: {s['skill']}",
-        f"Buy STOP: only buy if the price climbs UP to {money(s['entry'])}",
-        f"Stop (uh-oh, sell): {money(s['stop'])}",
-        f"Target (yay, sell): {money(s['target'])}",
-        f"Risk: {s['risk_pct']:.1f}% | Why: {s['reason']}",
-        f"Cancel if not bought by {cancel:%I:%M %p} ET. Sell after {hold.total_seconds() / 3600:.0f} hours no matter what.",
-        f"Crypto weather: {weather_note}",
+        f"1. {buy_words(s)[0].upper()}{buy_words(s)[1:]}",
+        f"2. Sell for a win at {money(s['target'])}",
+        f"3. Sell to stop the loss at {money(s['stop'])} (you'd lose about {s['risk_pct']:.1f}%)",
+        f"Not bought by {cancel:%I:%M %p} ET? Skip it. Sell after {hold.total_seconds() / 3600:.0f} hours no matter what.",
+        f"Why: {s['reason']}",
+        f"Crypto mood: {weather_note}",
         "",
         f"What this skill does: {KID_EXPLAINERS[s['skill']]}",
         "",
@@ -70,11 +77,11 @@ def signal_text(s, weather_note):
 
 
 def result_text(done):
-    lines = [f"CRYPTO BOSS [{C.MODE}] - results"]
+    lines = ["CRYPTO BOSS - practice results"]
     for s in done:
-        r = f"{s['r_multiple']:+.2f}R ({s['pct_return']:+.2f}%)" if s["status"] != "no_fill" else "no trade"
-        lines.append(f"{s['coin']} {s['skill']}: {WORDS[s['status']]} - {r}")
-    lines.append(f"(Robinhood's spread of about {C.SPREAD_PCT * 200:.1f}% per trade is already taken off.)")
+        r = f" ({s['pct_return']:+.1f}%)" if s["status"] != "no_fill" else ""
+        lines.append(f"{s['coin']} {s['skill']}: {WORDS[s['status']]}{r}")
+    lines.append(f"(Robinhood's hidden fee of about {C.SPREAD_PCT * 200:.1f}% is already taken off.)")
     return "\n".join(lines)
 
 
@@ -83,18 +90,21 @@ def recap_text(df, day, top, note):
     done["day"] = [et(t).strftime("%Y-%m-%d") for t in done["exit_time"]]
     today = done[done["day"] == day]
     traded = done[done["status"] != "no_fill"]
-    lines = [f"CRYPTO BOSS [{C.MODE}] - daily recap for {day}", ""]
+    lines = [f"CRYPTO BOSS - today's practice report ({day})", ""]
     t_traded = today[today["status"] != "no_fill"]
     if len(t_traded):
         wins = (t_traded["r_multiple"] > 0).sum()
-        lines.append(f"Today: {len(t_traded)} trades, {wins} wins, total {t_traded['r_multiple'].sum():+.2f}R")
+        lines.append(f"Today: {len(t_traded)} trades, {wins} won, {len(t_traded) - wins} lost "
+                     f"(total {t_traded['r_multiple'].sum():+.1f}R)")
     else:
         lines.append("Today: no trades finished.")
     if len(traded):
-        lines.append(f"All time: {len(traded)} trades, win {100 * (traded['r_multiple'] > 0).mean():.0f}%, "
-                     f"avg {traded['r_multiple'].mean():+.2f}R, total {traded['r_multiple'].sum():+.1f}R")
-    lines += [f"Wildest coins right now: {', '.join(top) or 'none'}", f"Crypto weather: {note}", "",
-              "Still PRACTICE. We wait for 2-3 months of good results before any real money."]
+        wins = (traded["r_multiple"] > 0).sum()
+        lines.append(f"Since the start: {len(traded)} trades, {wins} won, {len(traded) - wins} lost "
+                     f"(total {traded['r_multiple'].sum():+.1f}R)")
+    lines += [f"Coins moving the most: {', '.join(top) or 'none'}", f"Crypto mood: {note}", "",
+              "Still fake money. We wait for 2-3 months of good results before any real money.",
+              "R = times what we risked. +1R = won what we risked, -1R = lost it."]
     return "\n".join(lines)
 
 
@@ -130,28 +140,31 @@ def trusted(df):
 
 def short_text(signals):
     """Learning skills' signals: one short line each, all in one message, so Telegram stays readable."""
-    lines = [f"CRYPTO BOSS [{C.MODE}] - learning skills' practice trades (short form)"]
+    lines = ["CRYPTO BOSS - new practice trades (short form)"]
     for s in signals:
         hold = pd.Timedelta(s.get("max_hold") or C.MAX_HOLD).total_seconds() / 3600
-        lines.append(f"{s['coin']} {s['skill']}: buy if it climbs to {money(s['entry'])}, "
-                     f"stop {money(s['stop'])}, target {money(s['target'])}, max {hold:.0f}h")
-    lines.append("These skills are still learning. The Coach sends full messages once a skill has earned trust.")
+        lines.append(f"{s['coin']} {s['skill']}: {buy_words(s)}, win at {money(s['target'])}, "
+                     f"stop at {money(s['stop'])}, max {hold:.0f}h")
+    lines.append("These skills are still learning. Full messages come once a skill starts winning.")
     return "\n".join(lines)
 
 
 def skills_text(df):
-    lines = [f"CRYPTO BOSS [{C.MODE}] - skill scoreboard", ""]
+    lines = ["CRYPTO BOSS - skill scoreboard", ""]
+    quiet = []
     for s in skill_stats(df):
         if not s["trades"]:
-            lines.append(f"{s['skill']}: no finished trades yet")
+            quiet.append(s["skill"])
             continue
-        tag = " (BENCHED - losing)" if s["benched"] else " (TRUSTED - winning lately)" if s["trusted"] else ""
-        lines.append(f"{s['skill']}: {s['trades']} trades, win {s['win']:.0f}%, avg {s['avg']:+.2f}R, "
-                     f"total {s['total']:+.1f}R{tag}")
-    lines += ["", f"Coach: quick to bench, slow to trust. Benched = {C.COACH_BENCH_TRADES}+ trades and its last "
-              f"{C.COACH_LOOKBACK} average below {C.COACH_BENCH_R:+.2f}R (keeps practicing quietly). Trusted = last "
-              f"{C.COACH_TRUST_TRADES} average above {C.COACH_TRUST_R:+.2f}R (full messages). The rest send short lines.",
-              "R = what we risked: +1R means we won what we risked."]
+        tag = " - BENCHED (losing)" if s["benched"] else " - TRUSTED (winning)" if s["trusted"] else ""
+        wins = round(s["trades"] * s["win"] / 100)
+        lines.append(f"{s['skill']}: {s['trades']} trade{'' if s['trades'] == 1 else 's'}, {wins} won, total {s['total']:+.1f}R{tag}")
+    if quiet:
+        lines.append(f"No finished trades yet: {', '.join(quiet)}")
+    lines += ["", f"Coach: a skill that is losing after {C.COACH_BENCH_TRADES} trades is BENCHED (it keeps "
+              f"practicing quietly). A skill winning over its last {C.COACH_TRUST_TRADES} trades is TRUSTED "
+              "(full messages). The rest send short lines.",
+              "R = times what we risked. +1R = won what we risked, -1R = lost it."]
     return "\n".join(lines)
 
 

@@ -51,10 +51,13 @@ DAY_ENTRY_WINDOW = "4h"            # day skills (Wake-Up Rally): 4 hours to get 
 DAY_MAX_HOLD = "24h"               # ...and they may hold up to 1 day (the test needed the full day)
 COOLDOWN = "2h"                    # each skill waits 2 hours before a new signal on the same coin
 # More practice = faster learning: every skill may trade the same coin (one active trade per coin per skill),
-# up to 3 new trades per skill per day and 30 in total per day (days start at midnight UTC).
+# up to 3 new trades per skill per day and 45 in total per day (days start at midnight UTC).
 SKILL_DAILY_CAP = 3
-DAILY_CAP = 30
-MAX_NEW_PER_RUN = 8
+DAILY_CAP = 45
+MAX_NEW_PER_RUN = 12
+# Dip twins: every skill also has a "(Dip)" version that waits for the price to DROP a little, then buys only
+# once a candle closes green back above that price (proof of a bounce). Falls to the stop first = never bought.
+DIP_ATR = 0.25                     # how far below the last price the dip version buys, in "normal candle sizes" (ATR)
 
 # --- Costs ---
 # Robinhood crypto has no fee but builds in a "spread": you pay a bit more to buy and get a bit less

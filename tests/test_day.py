@@ -43,12 +43,14 @@ def test_fires():
     assert x["day_chg"] > 0.05 and x["drop60"] < -0.15 and x["below50"] and x["rvol"] > 2, x
     assert wake_up_rally(x) is not None
     sigs = find_day(frames_for({"AAA": df}), lambda c: d, T, set(), set())
-    assert len(sigs) == 1, sigs
+    assert [x["skill"] for x in sigs] == ["Wake-Up Rally", "Wake-Up Rally (Dip)"], sigs
+    dip = sigs[1]                                              # dip twin: waits for a drop, buys cheaper
+    assert dip["order_type"] == "dip_bounce" and dip["stop"] < dip["entry"] < sigs[0]["entry"], dip
     s = sigs[0]
     assert s["skill"] == "Wake-Up Rally" and s["max_hold"] == "24h" and s["entry_window"] == "4h", s
     assert s["entry"] > s["stop"] and s["target"] > s["entry"], s
     # already fired today -> skip; coin busy -> skip
-    assert find_day(frames_for({"AAA": df}), lambda c: d, T, set(), {("AAA", "Wake-Up Rally")}) == []
+    assert find_day(frames_for({"AAA": df}), lambda c: d, T, set(), {("AAA", "Wake-Up Rally"), ("AAA", "Wake-Up Rally (Dip)")}) == []
     assert find_day(frames_for({"AAA": df}), lambda c: d, T, {"AAA"}, set()) == []
     print("fires OK")
 

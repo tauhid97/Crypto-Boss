@@ -21,9 +21,9 @@ def test_coach():
     assert bot.trusted(df) == {"Band Bounce", "MACD 200"}, bot.trusted(df)
     text = bot.skills_text(df)
     assert text.index("Band Bounce") < text.index("Dip Catcher"), text                    # best skill first
-    assert "Dip Catcher: 3 trades, win 33%, avg -0.43R, total -1.3R (BENCHED" in text, text
-    assert "Band Bounce: 5 trades, win 80%, avg +0.36R, total +1.8R (TRUSTED" in text, text
-    assert "Triple Check: no finished trades yet" in text, text
+    assert "Dip Catcher: 3 trades, 1 won, total -1.3R - BENCHED" in text, text
+    assert "Band Bounce: 5 trades, 4 won, total +1.8R - TRUSTED" in text, text
+    assert "No finished trades yet:" in text and "Triple Check" in text.split("No finished")[1], text
     print(text)
     print("coach OK")
 
@@ -35,7 +35,7 @@ def test_messages():
              "published_at": "2026-11-05T00:00:00+00:00", "max_hold": "4h"}
             for c, k in [("SOL", "Dip Catcher"), ("SOL", "Band Bounce"), ("DOGE", "EMA Cross"), ("PEPE", "Triple Check")]]
     text = bot.short_text(sigs[2:])
-    assert text.count("\n") == 3 and "DOGE EMA Cross: buy if it climbs to" in text and "max 4h" in text, text
+    assert text.count("\n") == 3 and "DOGE EMA Cross: buy if the price RISES to" in text and "max 4h" in text, text
     print(text)
 
 

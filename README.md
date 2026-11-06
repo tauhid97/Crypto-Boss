@@ -14,7 +14,13 @@ A **Coach** keeps score for every skill: **quick to bench, slow to trust**.
 - Every other skill is still **learning**: its trades come as short one-line messages.
 
 **More practice = faster learning** (Nov 5, 2026): every skill may trade the same coin, up to 3 new
-practice trades per skill per day and 30 in total.
+practice trades per skill per day and 45 in total.
+
+**Dip versions** (Nov 6, 2026): every skill has a "(Dip)" twin. The twin waits for the price to drop a
+little, then buys only once a 15-minute candle closes green back above the dip price (proof it is bouncing
+up). If it keeps falling to the safety price first, it never buys. In a 120-day past test (fee included)
+this beat buying the dip right away for every skill, and beat the original for 3 of 7, but everything
+still lost after the fee. Practice only.
 
 **Wake-Up Rally** (added Nov 4, 2026) is borrowed from the stock bot. It checks *every* coin (not just
 the 5 wildest): a coin down 15%+ in 60 days that suddenly jumps 3%+ today on 2x its usual volume. It buys
@@ -29,8 +35,8 @@ good live results before even thinking about real money.
 
 | When | Message |
 |---|---|
-| A skill finds a setup | "CRYPTO BOSS [PRACTICE] - SOL ... Buy STOP ... Stop ... Target" |
-| A practice trade ends | "results: SOL EMA Cross: TARGET HIT +1.6R" |
+| A skill finds a setup | "CRYPTO BOSS - practice trade: SOL ... Buy if the price RISES/DROPS to ... Sell for a win at ..." |
+| A practice trade ends | "practice results: SOL EMA Cross: WIN - hit the sell-high price (+1.6%)" |
 | Every night at ~9 PM New York time | Daily recap + the skill scoreboard |
 
 **You can ask the bot things** (it answers within about 15 minutes): `/status`, `/calls`
