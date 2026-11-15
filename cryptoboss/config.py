@@ -59,6 +59,16 @@ MAX_NEW_PER_RUN = 12
 # once a candle closes green back above that price (proof of a bounce). Falls to the stop first = never bought.
 DIP_ATR = 0.25                     # how far below the last price the dip version buys, in "normal candle sizes" (ATR)
 
+# --- Crash Dip (an idea from the free NostalgiaForInfinity bot) ---
+# Buys a coin right away when it has crashed 5%+ under its 20-candle average and looks worn out, on ANY coin
+# (not just the 5 wildest), even on stormy days (crashes are what it waits for). It sells once the coin bounces
+# into profit and calms down (RSI drops), at -10% if it keeps falling, or after 14 days.
+# Past test (Jul-Nov 2026, 32 coins, 15m candles, spread on): 73 trades, 77% won, about +1.15% a trade.
+CRASH_DAILY_CAP = 10               # crashes hit many coins at once, so this skill may make up to 10 trades a day
+CRASH_STOP_PCT = 10.0
+CRASH_ENTRY_WINDOW = "30min"       # buys at the next candle's opening price
+CRASH_MAX_HOLD = "14D"
+
 # --- Costs ---
 # Robinhood crypto has no fee but builds in a "spread": you pay a bit more to buy and get a bit less
 # when you sell. We assume 0.3% each way (0.6% per round trip). Raise this if your fills look worse.

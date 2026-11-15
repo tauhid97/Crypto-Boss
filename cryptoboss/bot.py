@@ -7,22 +7,33 @@ import pandas as pd
 from . import config as C
 from . import notify, report
 from .data import daily, get_all
-from .skills import DAY_SKILLS, KID_EXPLAINERS, find_day, find_new, money, prepare, weather
+from .skills import DAY_SKILLS, KID_EXPLAINERS, find_crash, find_day, find_new, money, prepare, weather
 from .tracker import ACTIVE, settle
 
 COLS = ["id", "published_at", "coin", "skill", "order_type", "entry", "stop", "target", "risk_pct",
         "reason", "status", "fill_time", "fill_price", "exit_time", "exit_price", "r_multiple", "pct_return",
-        "entry_window", "max_hold"]
+        "entry_window", "max_hold", "exit_rule"]
 DISCLAIMER = "Practice only (fake money). Not money advice. Crypto can drop fast."
-WORDS = {"target": "WIN - hit the sell-high price", "stop": "LOSS - hit the safety price",
+WORDS = {"target": "WIN - sold for a profit", "stop": "LOSS - hit the safety price",
          "timeout": "time's up - sold", "no_fill": "never bought (price didn't get there)"}
 
 
 def buy_words(s):
     """How to buy, in plain words: dip orders wait for a drop, climb orders wait for a rise."""
+    if s.get("order_type") == "buy_now":
+        return f"buy now, at about {money(s['entry'])}"
     if s.get("order_type") == "dip_bounce":
         return f"wait for the price to DROP to {money(s['entry'])}, then buy only once it bounces back above it"
     return f"buy if the price RISES to {money(s['entry'])}"
+
+
+def cool_rule(s):
+    return s.get("exit_rule") == "cool_down"
+
+
+def hold_words(hold):
+    h = hold.total_seconds() / 3600
+    return f"{h / 24:.0f} days" if h >= 48 else f"{h:.0f} hours"
 
 
 def load_coins():
@@ -65,9 +76,10 @@ def signal_text(s, weather_note):
         f"CRYPTO BOSS - practice trade: {s['coin']}",
         f"Skill: {s['skill']}",
         f"1. {buy_words(s)[0].upper()}{buy_words(s)[1:]}",
-        f"2. Sell for a win at {money(s['target'])}",
+        (f"2. Sell for a win once it bounces into profit and calms down - I'll message you (or at {money(s['target'])} if it jumps)"
+         if cool_rule(s) else f"2. Sell for a win at {money(s['target'])}"),
         f"3. Sell to stop the loss at {money(s['stop'])} (you'd lose about {s['risk_pct']:.1f}%)",
-        f"Not bought by {cancel:%I:%M %p} ET? Skip it. Sell after {hold.total_seconds() / 3600:.0f} hours no matter what.",
+        f"Not bought by {cancel:%I:%M %p} ET? Skip it. Sell after {hold_words(hold)} no matter what.",
         f"Why: {s['reason']}",
         f"Crypto mood: {weather_note}",
         "",
@@ -142,9 +154,10 @@ def short_text(signals):
     """Learning skills' signals: one short line each, all in one message, so Telegram stays readable."""
     lines = ["CRYPTO BOSS - new practice trades (short form)"]
     for s in signals:
-        hold = pd.Timedelta(s.get("max_hold") or C.MAX_HOLD).total_seconds() / 3600
-        lines.append(f"{s['coin']} {s['skill']}: {buy_words(s)}, win at {money(s['target'])}, "
-                     f"stop at {money(s['stop'])}, max {hold:.0f}h")
+        hold = hold_words(pd.Timedelta(s.get("max_hold") or C.MAX_HOLD))
+        win = "win when it bounces and calms down" if cool_rule(s) else f"win at {money(s['target'])}"
+        lines.append(f"{s['coin']} {s['skill']}: {buy_words(s)}, {win}, "
+                     f"stop at {money(s['stop'])}, max {hold}")
     lines.append("These skills are still learning. Full messages come once a skill starts winning.")
     return "\n".join(lines)
 
@@ -214,6 +227,10 @@ def run(now=None):
     busy = {c for c, k, t, st in pairs if st in ACTIVE and k in DAY_SKILLS}   # a day skill already in this coin
     if room - len(new_sigs) > 0:
         new_sigs += find_day(frames, daily, now, busy, skip)
+    # Crash Dip: every coin, even on stormy days, up to CRASH_DAILY_CAP a day
+    crash_room = min(C.CRASH_DAILY_CAP - int(made.get("Crash Dip", 0)), room - len(new_sigs))
+    if crash_room > 0:
+        new_sigs += find_crash(frames, now, blocked, crash_room)
     for s in new_sigs:
         s.update(id=f"{now:%Y%m%d%H%M}-{s['coin']}", published_at=now.isoformat(), status="pending")
         df = pd.concat([df, pd.DataFrame([s])], ignore_index=True) if len(df) else pd.DataFrame([s])

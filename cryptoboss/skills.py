@@ -48,6 +48,11 @@ def prepare(df):
     lo14, hi14 = df["Low"].rolling(14).min(), df["High"].rolling(14).max()
     df["StochK"] = (100 * (c - lo14) / (hi14 - lo14).replace(0, float("nan"))).rolling(3).mean()
     df["StochD"] = df["StochK"].rolling(3).mean()
+    # extra lines for Crash Dip (NostalgiaForInfinity idea)
+    df["AroonUp"] = df["High"].rolling(15).apply(lambda x: x.argmax(), raw=True) * 100 / 14
+    r = df["RSI"]
+    lo, hi = r.rolling(14).min(), r.rolling(14).max()
+    df["StochRSI"] = (100 * (r - lo) / (hi - lo).replace(0, float("nan"))).rolling(3).mean()
     return df
 
 
@@ -279,11 +284,51 @@ def wake_up_rally_dip(x):
 
 DAY_SKILLS["Wake-Up Rally (Dip)"] = wake_up_rally_dip
 
+
+# --- Crash Dip: from the free NostalgiaForInfinity bot. Buys deep crashes right away, sells once it calms down ---
+
+def crash_dip(df, i):
+    """NFI's "condition 2": the price is 5.2%+ under its 20-candle average, no new high for a while
+    (Aroon up under 30) and worn out (Stoch RSI under 30). Buy now, sell when it bounces and cools down."""
+    if i < 60:
+        return None
+    r = df.iloc[i]
+    if not (r["AroonUp"] < 30 and r["StochRSI"] < 30 and r["Close"] < r["EMA20"] * 0.948):
+        return None
+    return {"order_type": "buy_now", "entry": r["Close"],
+            "reason": f"Crashed {(1 - r['Close'] / r['EMA20']) * 100:.0f}% under its average and looks worn out"}
+
+
+CRASH_SKILLS = {"Crash Dip": crash_dip}
+
+
+def find_crash(frames, t, blocked, room):
+    """Crash Dip looks at EVERY coin, even on stormy days. blocked = (coin, skill) pairs to skip right now."""
+    out = []
+    for coin, df in frames.items():
+        if len(out) >= room:
+            break
+        if (coin, "Crash Dip") in blocked:
+            continue
+        i = row_at(df, t)
+        if i < 96 or not df["DollarVol24h"].iloc[i] >= C.MIN_24H_DOLLAR_VOL:
+            continue
+        idea = crash_dip(df, i)
+        if not idea:
+            continue
+        entry = _sig(idea["entry"])
+        out.append({"coin": coin, "skill": "Crash Dip", "order_type": "buy_now", "entry": entry,
+                    "stop": _sig(entry * (1 - C.CRASH_STOP_PCT / 100)), "target": _sig(entry * 1.20),
+                    "risk_pct": C.CRASH_STOP_PCT, "reason": idea["reason"], "exit_rule": "cool_down",
+                    "entry_window": C.CRASH_ENTRY_WINDOW, "max_hold": C.CRASH_MAX_HOLD})
+    return out
+
+
 BASE_SKILLS = {"Breakout Rocket": breakout_rocket, "Dip Catcher": dip_catcher, "EMA Cross": ema_cross,
                "MACD 200": macd_200, "Band Bounce": band_bounce, "VWAP Pullback": vwap_pullback,
                "Triple Check": triple_check}
 SKILLS = {**BASE_SKILLS, **{f"{k} (Dip)": dip_twin(f) for k, f in BASE_SKILLS.items()}}
-ALL_SKILLS = {**SKILLS, **DAY_SKILLS}
+ALL_SKILLS = {**SKILLS, **DAY_SKILLS, **CRASH_SKILLS}
 
 KID_EXPLAINERS = {
     "Breakout Rocket": "The coin is going up and lots of people just jumped in. If it breaks above "
@@ -302,6 +347,9 @@ KID_EXPLAINERS = {
 }
 DIP_WORDS = " Dip version: we wait for a small drop, then buy only once a candle closes green back above the dip price (proof it is bouncing up, not still falling)."
 KID_EXPLAINERS.update({f"{k} (Dip)": v + DIP_WORDS for k, v in list(KID_EXPLAINERS.items())})
+KID_EXPLAINERS["Crash Dip"] = ("The coin just fell a lot, very fast, and the sellers look tired. We buy right away and "
+                               "sell once it bounces back into profit and calms down. If it keeps falling 10%, we get out. "
+                               "Idea borrowed from a free bot called NostalgiaForInfinity.")
 
 
 def make_signal(coin, skill, idea):
