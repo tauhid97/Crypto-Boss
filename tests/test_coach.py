@@ -35,7 +35,7 @@ def test_messages():
              "published_at": "2026-11-05T00:00:00+00:00", "max_hold": "4h"}
             for c, k in [("SOL", "Dip Catcher"), ("SOL", "Band Bounce"), ("DOGE", "EMA Cross"), ("PEPE", "Triple Check")]]
     text = bot.short_text(sigs[2:])
-    assert text.count("\n") == 3 and "DOGE EMA Cross: buy if the price RISES to" in text and "max 4h" in text, text
+    assert text.count("\n") == 3 and "DOGE EMA Cross: buy if the price RISES to" in text and "max 4 hours" in text, text
     print(text)
 
 
